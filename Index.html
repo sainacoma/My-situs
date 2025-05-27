@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Website IPA</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+    h1, h2, h3 { color: #2c3e50; }
+    button { padding: 10px 20px; margin: 10px 5px; cursor: pointer; }
+    .hidden { display: none; }
+    .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px #ccc; }
+    nav button { margin: 5px; }
+    label { display: block; margin: 10px 0 5px; }
+    input[type=text], textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+    textarea { resize: vertical; }
+    .soal-item { border-bottom: 1px solid #ddd; padding: 10px 0; }
+    .soal-link { margin-top: 5px; font-size: 0.9em; }
+    .admin-bar { background: #34495e; color: white; padding: 10px; text-align: right; }
+    .admin-bar button { background: #e74c3c; color: white; border: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Admin bar -->
+  <div id="adminBar" class="admin-bar hidden">
+    Admin mode
+    <button onclick="logoutAdmin()">Logout</button>
+  </div>
+
+  <!-- Beranda -->
+  <div id="pageHome">
+    <h1>Selamat datang</h1>
+    <p>Silahkan tekan Mulai untuk melanjutkan ke halaman selanjutnya, atau tekan Keluar untuk menutup halaman.</p>
+    <button onclick="goToPage('pageMapel')">Mulai</button>
+    <button onclick="window.close()">Keluar</button>
+    <hr />
+    <button onclick="showAdminLogin()">Login Admin</button>
+  </div>
+
+  <!-- Pilih Mata Pelajaran -->
+  <div id="pageMapel" class="hidden">
+    <h2>Pilih Mata Pelajaran</h2>
+    <nav id="navMapel"></nav>
+    <button onclick="goToPage('pageHome')">Kembali</button>
+  </div>
+
+  <!-- Halaman Soal -->
+  <div id="pageSoal" class="hidden">
+    <h2 id="judulMapel"></h2>
+    <div id="listSoal"></div>
+    <button onclick="goToPage('pageMapel')">Kembali ke Mata Pelajaran</button>
+  </div>
+
+  <!-- Admin Login -->
+  <div id="pageAdminLogin" class="hidden">
+    <h2>Login Admin</h2>
+    <label>Password:</label>
+    <input type="password" id="adminPassword" />
+    <button onclick="loginAdmin()">Login</button>
+    <button onclick="goToPage('pageHome')">Batal</button>
+    <p id="adminLoginMsg" style="color:red;"></p>
+  </div>
+
+  <!-- Admin Edit Soal -->
+  <div id="pageAdminEdit" class="hidden">
+    <h2>Edit Soal - <span id="adminEditMapel"></span></h2>
+    <div id="adminSoalList"></div>
+    <h3>Tambah Soal Baru</h3>
+    <label>Soal:</label>
+    <textarea id="inputSoal" rows="3"></textarea>
+    <label>Jawaban:</label>
+    <textarea id="inputJawaban" rows="2"></textarea>
+    <label>Link (opsional):</label>
+    <input type="text" id="inputLink" placeholder="https://example.com" />
+    <button onclick="tambahSoal()">Tambah Soal</button>
+    <br/><br/>
+    <button onclick="goToPage('pageMapel')">Kembali</button>
+    <button onclick="logoutAdmin()">Logout Admin</button>
+  </div>
+
+</div>
+
+<script>
+  // Data mata pelajaran
+  const daftarMapel = ['Matematika', 'Fisika', 'Biologi', 'Kimia', 'Bahasa Inggris', 'Bahasa Indonesia', 'Agama Islam', 'PKWU', 'Senida', 'PJOK', 'PKN', 'Sejarah', 'Ekonomi'];
+
+  // Data soal default (jika localStorage belum ada)
+  const defaultData = {
+    'Matematika': [
+      { soal: 'Apa itu bilangan prima?', jawaban: 'Bilangan prima adalah bilangan yang hanya memiliki dua faktor, yaitu 1 dan dirinya sendiri.', link: 'https://id.wikipedia.org/wiki/Bilangan_prima' }
+    ],
+    'Fisika': [
+      { soal: 'Apa itu gaya?', jawaban: 'Gaya adalah dorongan atau tarikan yang dapat menyebabkan benda bergerak atau berubah bentuk.', link: 'https://id.wikipedia.org/wiki/Gaya_(fisika)' }
+    ],
+    // ... bisa ditambah sesuai kebutuhan
+  };
+
+  // Current mapel yg sedang dibuka
+  let currentMapel = null;
+  // Admin mode
+  let isAdmin = false;
+
+  // Elements
+  const pageHome = document.getElementById('pageHome');
+  const pageMapel = document.getElementById('pageMapel');
+  const pageSoal = document.getElementById('pageSoal');
+  const pageAdminLogin = document.getElementById('pageAdminLogin');
+  const pageAdminEdit = document.getElementById('pageAdminEdit');
+  const adminBar = document.getElementById('adminBar');
+  const navMapel = document.getElementById('navMapel');
+  const judulMapel = document.getElementById('judulMapel');
+  const listSoal = document.getElementById('listSoal');
+  const adminEditMapel = document.getElementById('adminEditMapel');
+  const adminSoalList = document.getElementById('adminSoalList');
+  const adminLoginMsg = document.getElementById('adminLoginMsg');
+
+  // Inisialisasi data di localStorage jika belum ada
+  function initData() {
+    if (!localStorage.getItem('dataSoal')) {
+      localStorage.setItem('dataSoal', JSON.stringify(defaultData));
+    }
+  }
+
+  // Load data soal dari localStorage
+  function loadData() {
+    const data = localStorage.getItem('dataSoal');
+    return data ? JSON.parse(data) : {};
+  }
+
+  // Simpan data soal ke localStorage
+  function saveData(data) {
+    localStorage.setItem('dataSoal', JSON.stringify(data));
+  }
+
+  // Navigasi antar halaman
+  function goToPage(pageId) {
+    [pageHome, pageMapel, pageSoal, pageAdminLogin, pageAdminEdit].forEach(page => {
+      page.classList.add('hidden');
+    });
+    document.getElementById(pageId).classList.remove('hidden');
+  }
+
+  // Render daftar mata pelajaran di halaman pilih mapel
+  function renderMapel() {
+    navMapel.innerHTML = '';
+    daftarMapel.forEach(mp => {
+      const btn = document.createElement('button');
+      btn.textContent = mp;
+      btn.onclick = () => openMapel(mp);
+      navMapel.appendChild(btn);
+    });
+  }
+
+  // Buka halaman soal mapel tertentu
+  function openMapel(mp) {
+    currentMapel = mp;
+    judulMapel.textContent = 'Mata Pelajaran: ' + mp;
+    goToPage('pageSoal');
+
+    const data = loadData();
+    const soalList = data[mp] || [];
+    renderSoal(soalList);
+
+    // Jika admin mode, langsung ke halaman edit soal
+    if (isAdmin) {
+      openAdminEdit(mp);
+    }
+  }
+
+  // Render soal di halaman soal (bukan admin)
+  function renderSoal(soalList) {
+    listSoal.innerHTML = '';
+    if (soalList.length === 0) {
+      listSoal.innerHTML = '<p>Tidak ada soal untuk mata pelajaran ini.</p>';
+      return;
+    }
+    soalList.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'soal-item';
+      div.innerHTML = `<strong>Soal ${idx + 1}:</strong> ${item.soal}
+        <p><strong>Jawaban:</strong> ${item.jawaban}</p>
+        ${item.link ? `<p class="soal-link"><a href="${item.link}" target="_blank">Link terkait</a></p>` : ''}
+      `;
+      listSoal.appendChild(div);
+    });
+  }
+
+  // Tampilkan halaman login admin
+  function showAdminLogin() {
+    adminLoginMsg.textContent = '';
+    document.getElementById('adminPassword').value = '';
+    goToPage('pageAdminLogin');
+  }
+
+  // Login admin sederhana
+  function loginAdmin() {
+    const pwd = document.getElementById('adminPassword').value;
+    if (pwd === 'admin123') {
+      isAdmin = true;
+      adminBar.classList.remove('hidden');
+      renderMapel();
+      goToPage('pageMapel');
+    } else {
+      adminLoginMsg.textContent = 'Password salah!';
+    }
+  }
+
+  // Logout admin
+  function logoutAdmin() {
+    isAdmin = false;
+    adminBar.classList.add('hidden');
+    goToPage('pageHome');
+  }
+
+  // Buka halaman edit admin untuk mapel tertentu
+  function openAdminEdit(mp) {
+    adminEditMapel.textContent = mp;
+    goToPage('pageAdminEdit');
+
+    const data = loadData();
+    const soalList = data[mp] || [];
+    renderAdminSoalList(soalList);
+  }
+
+  // Render list soal di halaman admin edit
+  function renderAdminSoalList(soalList) {
+    adminSoalList.innerHTML = '';
+    if (soalList.length === 0) {
+      adminSoalList.innerHTML = '<p>Tidak ada soal.</p>';
+      return;
+    }
+    soalList.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'soal-item';
+      div.innerHTML = `
+        <strong>Soal ${idx + 1}:</strong> <br/>
+        <textarea rows="2" id="adminSoal_${idx}">${item.soal}</textarea><br/>
+        <strong>Jawaban:</strong><br/>
+        <textarea rows="2" id="adminJawaban_${idx}">${item.jawaban}</textarea><br/>
+        <strong>Link:</strong><br/>
+        <input type="text" id="adminLink_${idx}" value="${item.link || ''}" /><br/>
+        <button onclick="hapusSoal(${idx})" style="margin-top:5px; background:#e74c3c; color:white;">Hapus Soal</button>
+        <hr/>
+      `;
+      adminSoalList.appendChild(div);
+    });
+
+    // Tambahkan tombol simpan edit soal
+    if (!document.getElementById('btnSaveEdit')) {
+      const btnSave = document.createElement('button');
+      btnSave.textContent = 'Simpan Perubahan';
+      btnSave.id = 'btnSaveEdit';
+      btnSave.style.marginTop = '10px';
+      btnSave.onclick = simpanEditSoal;
+      adminSoalList.appendChild(btnSave);
+    }
+  }
+
+  // Tambah soal baru dari form admin
+  function tambahSoal() {
+    const soal = document.getElementById('inputSoal').value.trim();
+    const jawaban = document.getElementById('inputJawaban').value.trim();
+    const link = document.getElementById('inputLink').value.trim();
+
+    if (!soal || !jawaban) {
+      alert('Soal dan jawaban wajib diisi.');
+      return;
+    }
+
+    const data = loadData();
+    if (!data[currentMapel]) data[currentMapel] = [];
+    data[currentMapel].push({ soal, jawaban, link });
+    saveData(data);
+
+    // Reset form input
+    document.getElementById('inputSoal').value = '';
+    document.getElementById('inputJawaban').value = '';
+    document.getElementById('inputLink').value = '';
+
+    openAdminEdit(currentMapel); // refresh daftar soal admin
+  }
+
+  // Simpan perubahan soal yang diedit admin
+  function simpanEditSoal() {
+    const data = loadData();
+    if (!data[currentMapel]) data[currentMapel] = [];
+
+    const soalList = data[currentMapel];
+
+    for(let i=0; i<soalList.length; i++) {
+      const soalTxt = document.getElementById(`adminSoal_${i}`).value.trim();
+      const jawabanTxt = document.getElementById(`adminJawaban_${i}`).value.trim();
+      const linkTxt = document.getElementById(`adminLink_${i}`).value.trim();
+      if (!soalTxt || !jawabanTxt) {
+        alert(`Soal dan jawaban pada nomor ${i+1} wajib diisi.`);
+        return;
+      }
+      soalList[i].soal = soalTxt;
+      soalList[i].jawaban = jawabanTxt;
+      soalList[i].link = linkTxt;
+    }
+
+    saveData(data);
+    alert('Perubahan berhasil disimpan!');
+    openAdminEdit(currentMapel);
+  }
+
+  // Hapus soal admin
+  function hapusSoal(idx) {
+    if (!confirm('Yakin ingin menghapus soal ini?')) return;
+    const data = loadData();
+    if (!data[currentMapel]) return;
+    data[currentMapel].splice(idx, 1);
+    saveData(data);
+    openAdminEdit(currentMapel);
+  }
+
+  // Inisialisasi
+  initData();
+  renderMapel();
+  goToPage('pageHome');
+
+</script>
+
+</body>
+</html>
